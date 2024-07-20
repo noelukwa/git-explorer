@@ -47,7 +47,7 @@ type CommitsFilter struct {
 	GroupBy    *GroupAbleCol
 }
 
-type GitRemoteRepository interface {
+type RemoteRepository interface {
 	SaveRepo(ctx context.Context, repo *models.Repository) error
 	GetRepo(ctx context.Context, name string) (*models.Repository, error)
 	FindCommits(ctx context.Context, filter CommitsFilter, pagination Pagination) (PaginatedResponse[models.Commit], error)
@@ -57,5 +57,5 @@ type GitRemoteRepository interface {
 
 type RepositoryFactory interface {
 	IntentRepository() IntentRepository
-	GitRemoteRepository() GitRemoteRepository
+	RemoteRepository() RemoteRepository
 }
