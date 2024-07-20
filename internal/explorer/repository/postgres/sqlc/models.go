@@ -20,7 +20,7 @@ type Commit struct {
 	Hash         string
 	AuthorID     int64
 	Message      string
-	Url          string
+	Url          pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 	RepositoryID int64
 }

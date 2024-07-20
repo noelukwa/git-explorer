@@ -22,7 +22,7 @@ CREATE TABLE commits (
     hash TEXT PRIMARY KEY,
     author_id BIGINT NOT NULL REFERENCES authors(id),
     message TEXT NOT NULL,
-    url TEXT NOT NULL,
+    url TEXT DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     repository_id BIGINT NOT NULL REFERENCES repositories(id)
 );

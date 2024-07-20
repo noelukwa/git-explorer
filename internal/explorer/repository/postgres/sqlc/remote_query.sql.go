@@ -45,7 +45,7 @@ const findCommits = `-- name: FindCommits :many
 SELECT 
     c.hash, c.message, c.url, c.created_at,
     a.id AS author_id, a.name AS author_name, a.email AS author_email, a.username AS author_username,
-    r.id AS repo_id, r.watchers, r.stargazers, r.full_name, r.created_at AS repo_created_at, 
+    r.id AS repo_id, r.watchers, r.stargazers, r.full_name AS repository, r.created_at AS repo_created_at, 
     r.updated_at AS repo_updated_at, r.language, r.forks
 FROM commits c
 JOIN repositories r ON c.repository_id = r.id
@@ -70,7 +70,7 @@ type FindCommitsParams struct {
 type FindCommitsRow struct {
 	Hash           string
 	Message        string
-	Url            string
+	Url            pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	AuthorID       int64
 	AuthorName     string
@@ -79,7 +79,7 @@ type FindCommitsRow struct {
 	RepoID         int64
 	Watchers       int32
 	Stargazers     int32
-	FullName       string
+	Repository     string
 	RepoCreatedAt  pgtype.Timestamptz
 	RepoUpdatedAt  pgtype.Timestamptz
 	Language       pgtype.Text
@@ -114,7 +114,7 @@ func (q *Queries) FindCommits(ctx context.Context, arg FindCommitsParams) ([]Fin
 			&i.RepoID,
 			&i.Watchers,
 			&i.Stargazers,
-			&i.FullName,
+			&i.Repository,
 			&i.RepoCreatedAt,
 			&i.RepoUpdatedAt,
 			&i.Language,
@@ -128,6 +128,23 @@ func (q *Queries) FindCommits(ctx context.Context, arg FindCommitsParams) ([]Fin
 		return nil, err
 	}
 	return items, nil
+}
+
+const getAuthor = `-- name: GetAuthor :one
+SELECT id, name, email, username FROM authors
+WHERE id = $1
+`
+
+func (q *Queries) GetAuthor(ctx context.Context, id int64) (Author, error) {
+	row := q.db.QueryRow(ctx, getAuthor, id)
+	var i Author
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Username,
+	)
+	return i, err
 }
 
 const getRepo = `-- name: GetRepo :one
@@ -256,7 +273,7 @@ type SaveCommitParams struct {
 	Hash         string
 	AuthorID     int64
 	Message      string
-	Url          string
+	Url          pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 	RepositoryID int64
 }
@@ -284,7 +301,7 @@ type SaveManyCommitsParams struct {
 	Hash         string
 	AuthorID     int64
 	Message      string
-	Url          string
+	Url          pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 	RepositoryID int64
 }

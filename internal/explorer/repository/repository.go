@@ -35,16 +35,14 @@ type IntentRepository interface {
 type GroupAbleCol string
 
 const (
-	GroupByAuthor GroupAbleCol = "author"
-	CreatedAt     GroupAbleCol = "createdAt"
+	GroupByAuthor GroupAbleCol = "author_id"
+	CreatedAt     GroupAbleCol = "created_at"
 )
 
 type CommitsFilter struct {
-	Repository string     `json:"repository"`
-	StartDate  *time.Time `json:"start_date"`
-	EndDate    *time.Time `json:"end_date"`
-	Author     *string    `json:"author,omitempty"`
-	GroupBy    *GroupAbleCol
+	RepositoryName string
+	StartDate      *time.Time
+	EndDate        *time.Time
 }
 
 type RemoteRepository interface {
@@ -53,6 +51,7 @@ type RemoteRepository interface {
 	FindCommits(ctx context.Context, filter CommitsFilter, pagination Pagination) (PaginatedResponse[models.Commit], error)
 	GetTopCommitters(ctx context.Context, repository string, startDate, endDate *time.Time, pagination Pagination) ([]models.AuthorStats, error)
 	SaveManyCommit(ctx context.Context, repoID int64, commit []models.Commit) error
+	SaveAuthor(ctx context.Context, author models.Author) error
 }
 
 type RepositoryFactory interface {

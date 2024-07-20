@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -19,20 +20,35 @@ type RemoteRepositoryImpl struct {
 }
 
 func (r *RemoteRepositoryImpl) SaveManyCommit(ctx context.Context, repoID int64, commits []models.Commit) error {
-
 	tx, err := r.conn.Begin(ctx)
 	if err != nil {
 		return err
 	}
-
 	defer tx.Rollback(ctx)
 
 	qtx := r.queries.WithTx(tx)
 
 	for _, commit := range commits {
-		err := qtx.SaveCommit(ctx, sqlc.SaveCommitParams{
+		author, err := qtx.GetAuthor(ctx, commit.Author.ID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			author, err = qtx.SaveAuthor(ctx, sqlc.SaveAuthorParams{
+				ID:       commit.Author.ID,
+				Name:     commit.Author.Name,
+				Email:    commit.Author.Email,
+				Username: commit.Author.Username,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to save author %s: %w", commit.Author.Username, err)
+			}
+		}
+
+		err = qtx.SaveCommit(ctx, sqlc.SaveCommitParams{
 			Hash:         commit.Hash,
-			AuthorID:     commit.Author.ID,
+			AuthorID:     author.ID,
 			CreatedAt:    pgtype.Timestamptz{Time: commit.CreatedAt, Valid: true},
 			Message:      commit.Message,
 			RepositoryID: repoID,
@@ -93,20 +109,23 @@ func (r *RemoteRepositoryImpl) GetRepo(ctx context.Context, name string) (*model
 func (r *RemoteRepositoryImpl) FindCommits(ctx context.Context, filter repository.CommitsFilter, pagination repository.Pagination) (repository.PaginatedResponse[models.Commit], error) {
 	var startDate, endDate pgtype.Timestamptz
 
-	if filter.StartDate != nil {
+	// Set startDate if filter.StartDate is provided and not zero
+	if filter.StartDate != nil && !filter.StartDate.IsZero() {
 		startDate.Time = *filter.StartDate
 		startDate.Valid = true
 	}
-	if filter.EndDate != nil {
+
+	// Set endDate if filter.EndDate is provided and not zero
+	if filter.EndDate != nil && !filter.EndDate.IsZero() {
 		endDate.Time = *filter.EndDate
 		endDate.Valid = true
 	}
 
+	// Execute the FindCommits query
 	rows, err := r.queries.FindCommits(ctx, sqlc.FindCommitsParams{
-		FullName: filter.Repository,
+		FullName: filter.RepositoryName,
 		Column2:  startDate,
 		Column3:  endDate,
-		Column4:  stringOrNull(filter.Author),
 		Limit:    int32(pagination.PerPage),
 		Offset:   int32((pagination.Page - 1) * pagination.PerPage),
 	})
@@ -125,7 +144,7 @@ func (r *RemoteRepositoryImpl) FindCommits(ctx context.Context, filter repositor
 				ID:         row.RepoID,
 				Watchers:   row.Watchers,
 				StarGazers: row.Stargazers,
-				FullName:   row.FullName,
+				FullName:   row.Repository,
 				CreatedAt:  row.RepoCreatedAt.Time,
 				UpdatedAt:  row.RepoUpdatedAt.Time,
 				Language:   row.Language.String,
@@ -140,11 +159,11 @@ func (r *RemoteRepositoryImpl) FindCommits(ctx context.Context, filter repositor
 		})
 	}
 
+	// Get the total count of commits matching the filter
 	totalCount, err := r.queries.CountCommits(ctx, sqlc.CountCommitsParams{
-		FullName: filter.Repository,
+		FullName: filter.RepositoryName,
 		Column2:  startDate,
 		Column3:  endDate,
-		Column4:  stringOrNull(filter.Author),
 	})
 	if err != nil {
 		return repository.PaginatedResponse[models.Commit]{}, err
@@ -196,17 +215,28 @@ func (r *RemoteRepositoryImpl) GetTopCommitters(ctx context.Context, repository 
 	return stats, nil
 }
 
-func stringOrNull(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
+func (r *RemoteRepositoryImpl) SaveAuthor(ctx context.Context, author models.Author) error {
+	_, err := r.queries.SaveAuthor(ctx, sqlc.SaveAuthorParams{
+		ID:       author.ID,
+		Name:     author.Name,
+		Email:    author.Email,
+		Username: author.Username,
+	})
+	return err
 }
 
-func parseURL(rawURL string) *url.URL {
-	if rawURL == "" {
-		return nil
+func stringOrNull(str *string) string {
+	if str == nil {
+		return ""
 	}
-	u, _ := url.Parse(rawURL)
-	return u
+	return *str
+}
+
+func parseURL(rawURL pgtype.Text) *url.URL {
+
+	if rawURL.Valid {
+		u, _ := url.Parse(rawURL.String)
+		return u
+	}
+	return nil
 }

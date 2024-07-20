@@ -17,6 +17,11 @@ type RemoteRepository struct {
 	mu      sync.RWMutex
 }
 
+// SaveAuthor implements repository.RemoteRepository.
+func (r *RemoteRepository) SaveAuthor(ctx context.Context, author models.Author) error {
+	panic("unimplemented")
+}
+
 func (r *RemoteRepository) SaveManyCommit(ctx context.Context, repoID int64, commits []models.Commit) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -114,7 +119,7 @@ func (r *RemoteRepository) FindCommits(ctx context.Context, filter repository.Co
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	repo, exists := r.repos[filter.Repository]
+	repo, exists := r.repos[filter.RepositoryName]
 	if !exists {
 		return repository.PaginatedResponse[models.Commit]{}, nil
 	}
@@ -126,8 +131,7 @@ func (r *RemoteRepository) FindCommits(ctx context.Context, filter repository.Co
 	var filteredCommits []models.Commit
 	for _, commit := range repoCommits {
 		if (filter.StartDate == nil || !commit.CreatedAt.Before(*filter.StartDate)) &&
-			(filter.EndDate == nil || !commit.CreatedAt.Before(*filter.EndDate)) &&
-			(filter.Author == nil || commit.Author.Username == *filter.Author) {
+			(filter.EndDate == nil || !commit.CreatedAt.Before(*filter.EndDate)) {
 			filteredCommits = append(filteredCommits, commit)
 		}
 	}

@@ -12,6 +12,10 @@ ON CONFLICT (full_name) DO UPDATE SET
 SELECT * FROM repositories
 WHERE full_name = $1;
 
+-- name: GetAuthor :one
+SELECT * FROM authors
+WHERE id = $1;
+
 -- name: SaveAuthor :one
 INSERT INTO authors (id, name, email, username)
 VALUES ($1, $2, $3, $4)
@@ -26,11 +30,12 @@ INSERT INTO commits (hash, author_id, message, url, created_at, repository_id)
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (hash) DO NOTHING;
 
+
 -- name: FindCommits :many
 SELECT 
     c.hash, c.message, c.url, c.created_at,
     a.id AS author_id, a.name AS author_name, a.email AS author_email, a.username AS author_username,
-    r.id AS repo_id, r.watchers, r.stargazers, r.full_name, r.created_at AS repo_created_at, 
+    r.id AS repo_id, r.watchers, r.stargazers, r.full_name AS repository, r.created_at AS repo_created_at, 
     r.updated_at AS repo_updated_at, r.language, r.forks
 FROM commits c
 JOIN repositories r ON c.repository_id = r.id
@@ -41,6 +46,7 @@ WHERE r.full_name = $1
     AND ($4::text IS NULL OR a.username = $4)
 ORDER BY c.created_at DESC
 LIMIT $5 OFFSET $6;
+
 
 -- name: CountCommits :one
 SELECT COUNT(*)

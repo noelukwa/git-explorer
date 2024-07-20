@@ -34,7 +34,7 @@ func TestSaveManyCommit(t *testing.T) {
 	err := r.SaveManyCommit(context.Background(), repo.ID, []models.Commit{commit})
 	assert.NoError(t, err)
 
-	commits, err := r.FindCommits(context.Background(), repository.CommitsFilter{Repository: "test/repo"}, repository.Pagination{Page: 1, PerPage: 10})
+	commits, err := r.FindCommits(context.Background(), repository.CommitsFilter{RepositoryName: "test/repo"}, repository.Pagination{Page: 1, PerPage: 10})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(commits.Data))
 	assert.Equal(t, commit.Hash, commits.Data[0].Hash)
@@ -68,7 +68,7 @@ func TestFindCommits(t *testing.T) {
 	r.SaveRepo(context.Background(), &repo)
 	r.SaveManyCommit(context.Background(), repo.ID, []models.Commit{commit1, commit2})
 
-	filter := repository.CommitsFilter{Repository: "test/repo"}
+	filter := repository.CommitsFilter{RepositoryName: "test/repo"}
 	pagination := repository.Pagination{Page: 1, PerPage: 10}
 	response, err := r.FindCommits(context.Background(), filter, pagination)
 	assert.NoError(t, err)
