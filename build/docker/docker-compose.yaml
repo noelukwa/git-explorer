@@ -15,13 +15,6 @@ services:
       - "--js"
       - "--sd=/data"
 
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
-    networks:
-      - backend
-
   postgres:
     image: postgres:latest
     environment:
