@@ -8,17 +8,23 @@ import (
 type EventKind string
 
 const (
-	NEW_INTENT  EventKind = "NEW_INTENT"
-	NEW_REPO    EventKind = "NEW_REPO"
-	NEW_COMMITS EventKind = "NEW_COMMITS"
+	NEW_REPO_INTENT  EventKind = "NEW_INTENT"
+	NEW_REPO_DATA    EventKind = "NEW_REPO_DATA"
+	NEW_COMMITS_DATA EventKind = "NEW_COMMITS_DATA"
 )
 
-type NewIntentEvent struct {
+type NewRepoIntentEvent struct {
 	Repository string    `json:"repository"`
 	Since      time.Time `json:"since"`
+	Kind       EventKind `json:"kind"`
 }
 
-type NewRepoInfoEvent struct {
+type NewRepoDataEvent struct {
+	Kind EventKind `json:"kind"`
+	Info Repo      `json:"info"`
+}
+
+type Repo struct {
 	Watchers   int32     `json:"watchers_count"`
 	StarGazers int32     `json:"stargazers_count"`
 	FullName   string    `json:"full_name"`
@@ -29,7 +35,8 @@ type NewRepoInfoEvent struct {
 	Forks      int32     `json:"forks"`
 }
 
-type NewCommitsInfoEvent struct {
+type NewCommitsDataEvent struct {
+	Kind       EventKind `json:"kind"`
 	Repository string    `json:"repository"`
 	Since      time.Time `json:"since"`
 	Commits    []Commit  `json:"commits"`

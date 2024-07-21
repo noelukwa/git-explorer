@@ -28,5 +28,7 @@ func SetupRoutes(intentService service.IntentService, repoService service.Remote
 	e.GET("/intents/:id", intentHandler.FetchIntent)
 	e.GET("/intents", intentHandler.FetchIntents)
 
+	remoteRepoHandler := handlers.NewRemoteRepositoryHandler(repoService)
+	e.GET("/repos/:name", remoteRepoHandler.FetchRepoInfo)
 	return e
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -29,12 +28,12 @@ type IntentService interface {
 }
 
 type intentService struct {
-	repo          repository.IntentRepository
-	messageClient messaging.Client
+	repo repository.IntentRepository
+	nc   *messaging.NATSClient
 }
 
-func NewIntentService(repo repository.IntentRepository, mClient messaging.Client) IntentService {
-	return &intentService{repo: repo, messageClient: mClient}
+func NewIntentService(repo repository.IntentRepository, nc *messaging.NATSClient) IntentService {
+	return &intentService{repo: repo, nc: nc}
 }
 
 func (i *intentService) CreateIntent(ctx context.Context, repo string, since time.Time) (*models.Intent, error) {
@@ -72,6 +71,11 @@ func (i *intentService) CreateIntent(ctx context.Context, repo string, since tim
 		return nil, err
 	}
 
+	err = i.sendNewIntentEvent(ctx, intent)
+	if err != nil {
+		return nil, err
+	}
+
 	return intent, nil
 }
 
@@ -103,22 +107,25 @@ func (i *intentService) UpdateIntent(ctx context.Context, update models.IntentUp
 	return intent, nil
 }
 
-func (i *intentService) sendNewIntentEvent(intent *models.Intent) error {
-	eventJSON, err := json.Marshal(intent)
+func (i *intentService) sendNewIntentEvent(ctx context.Context, intent *models.Intent) error {
+	eventJSON, err := json.Marshal(&events.NewRepoIntentEvent{
+		Since:      intent.Since,
+		Repository: intent.Repository,
+		Kind:       events.NEW_REPO_INTENT,
+	})
+
 	if err != nil {
 		return fmt.Errorf("error marshaling intent event: %w", err)
 	}
 
 	event := messaging.Event{
-		Subject: events.NEW_INTENT,
+		Subject: events.NEW_REPO_INTENT,
 		Data:    eventJSON,
 	}
 
-	err = i.messageClient.Publish(event)
+	err = i.nc.Publish(ctx, event)
 	if err != nil {
 		return fmt.Errorf("error publishing intent event: %w", err)
 	}
-
-	log.Println("published new intent yo!!")
 	return nil
 }

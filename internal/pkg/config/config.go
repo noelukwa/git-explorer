@@ -4,14 +4,14 @@ import "time"
 
 type ExplorerConfig struct {
 	DatabaseURL       string `split_words:"true" default:"postgres://explorer:explorer2025@localhost/explorer?sslmode=disable"`
-	Port              int    `default:"9800"`
+	Port              int    `required:"true"`
 	TestDatabaseURL   string `split_words:"true" required:"true"`
 	MessagingProvider string `split_words:"true" default:"nats"`
 	MessagingURL      string `split_words:"true" required:"true"`
 }
 
 type ExplorerdConfig struct {
-	GithubToken        string        `split_words:"true" required:"true"`
+	GithubToken        string        `split_words:"true"`
 	MessagingProvider  string        `split_words:"true" default:"nats"`
 	MessagingURL       string        `split_words:"true" required:"true"`
 	BatchSize          int           `split_words:"true" default:"10"`

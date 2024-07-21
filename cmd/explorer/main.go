@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	_ "github.com/joho/godotenv/autoload"
@@ -23,15 +25,14 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	mc, err := messaging.NewMessagingClient(
-		cfg.MessagingProvider,
-		cfg.MessagingURL,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
+	nc, err := messaging.NewNATSClient(ctx, cfg.MessagingURL)
 	if err != nil {
 		log.Fatalf("failed to connect to messaging system: %v", err)
 	}
-	defer mc.Close()
+	defer nc.Close()
 
 	conn, err := pgx.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -47,13 +48,14 @@ func main() {
 
 	intentService := service.NewIntentService(
 		pgStore.IntentRepository(),
-		mc,
+		nc,
 	)
+
 	repoService := service.NewRemoteRepoService(
 		pgStore.RemoteRepository(),
 	)
 
 	router := api.SetupRoutes(intentService, repoService)
 
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), router))
 }
