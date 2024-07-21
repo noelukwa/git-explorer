@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,5 +60,35 @@ func main() {
 
 	router := api.SetupRoutes(intentService, repoService)
 
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), router))
+	httpServer := &http.Server{
+		Handler: router,
+		Addr:    fmt.Sprintf(":%d", cfg.Port),
+	}
+
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
+
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		log.Printf("starting HTTP server on %d", cfg.Port)
+		serverErrors <- httpServer.ListenAndServe()
+	}()
+
+	select {
+	case sig := <-shutdownSignals:
+		log.Printf("received termination signal: %s", sig.String())
+
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer shutdownCancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("server shutdown error: %v", err)
+	}
 }

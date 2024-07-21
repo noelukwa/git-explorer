@@ -14,7 +14,6 @@ import (
 	"github.com/noelukwa/git-explorer/internal/pkg/config"
 	"github.com/noelukwa/git-explorer/internal/pkg/github"
 	"github.com/noelukwa/git-explorer/internal/pkg/messaging"
-	"golang.org/x/sync/errgroup"
 )
 
 type RepositoryIntent struct {
@@ -53,40 +52,38 @@ func main() {
 	gc := github.NewClient(cfg.GithubToken)
 	daemon := service.NewService(nc, cfg.MonitoringInterval, kv, gc)
 
-	g, ctx := errgroup.WithContext(context.Background())
+	errChan := make(chan error, 2)
 
-	g.Go(func() error {
+	go func() {
 		if err := daemon.Start(ctx); err != nil {
-			return err
+			errChan <- err
 		}
-		return nil
-	})
+	}()
 
-	g.Go(func() error {
-		err := daemon.Subcribe(ctx, consumer, nc, kv)
-		if err != nil {
-			return err
+	go func() {
+		if err := daemon.Subcribe(ctx, consumer, nc, kv); err != nil {
+			errChan <- err
 		}
-		return nil
-	})
+	}()
 
 	shutdownSignals := make(chan os.Signal, 1)
 	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
 
-	g.Go(func() error {
+	go func() {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case sig := <-shutdownSignals:
 			log.Printf("Received signal: %v", sig)
 			cancel()
-			return nil
+			errChan <- nil
+		case <-ctx.Done():
+			errChan <- ctx.Err()
 		}
-	})
+	}()
 
-	err = g.Wait()
-	if err != nil && err != context.Canceled {
-		log.Fatalln(err)
+	// Wait for either an error or a shutdown signal
+	if err := <-errChan; err != nil && err != context.Canceled {
+		log.Fatalf("Error: %v", err)
+	} else {
+		log.Println("gracefully shut down")
 	}
-	log.Println("gracefully shut down")
 }
