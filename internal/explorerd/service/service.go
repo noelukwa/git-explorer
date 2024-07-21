@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-github/v63/github"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/noelukwa/git-explorer/internal/events"
+	"github.com/noelukwa/git-explorer/internal/explorer/models"
 	octo "github.com/noelukwa/git-explorer/internal/pkg/github"
 	"github.com/noelukwa/git-explorer/internal/pkg/messaging"
 )
@@ -164,7 +165,7 @@ func (svc *service) fetchAndPublishRepoInfo(ctx context.Context, fullRepo string
 
 	event := &events.NewRepoDataEvent{
 		Kind: events.NEW_REPO_DATA,
-		Info: events.Repo{
+		Info: &models.Repository{
 			Watchers:   int32(repoInfo.GetWatchersCount()),
 			StarGazers: int32(repoInfo.GetStargazersCount()),
 			FullName:   repoInfo.GetFullName(),
@@ -223,7 +224,7 @@ func (svc *service) fetchAndPublishCommits(ctx context.Context, intent Repositor
 	convertedCommits := convertCommits(commits)
 
 	if !intent.Until.IsZero() {
-		var filteredCommits []events.Commit
+		var filteredCommits []models.Commit
 		for _, commit := range convertedCommits {
 			if commit.CreatedAt.Before(intent.Until) || commit.CreatedAt.Equal(intent.Until) {
 				filteredCommits = append(filteredCommits, commit)
@@ -262,20 +263,19 @@ func (svc *service) fetchAndPublishCommits(ctx context.Context, intent Repositor
 	return nil
 }
 
-func convertCommits(githubCommits []*github.RepositoryCommit) []events.Commit {
-	var commits []events.Commit
+func convertCommits(githubCommits []*github.RepositoryCommit) []models.Commit {
+	var commits []models.Commit
 	for _, commit := range githubCommits {
 		if commit.Commit != nil && commit.Commit.Author != nil && commit.Commit.Committer != nil {
-			commits = append(commits, events.Commit{
+			commits = append(commits, models.Commit{
 				Hash: commit.GetSHA(),
-				Author: events.Author{
+				Author: models.Author{
 					Name:     commit.Commit.Author.GetName(),
 					Email:    commit.Commit.Author.GetEmail(),
 					Username: commit.Author.GetLogin(),
 					ID:       commit.Author.GetID(),
 				},
 				Message:   commit.Commit.GetMessage(),
-				URL:       commit.URL,
 				CreatedAt: commit.Commit.Committer.GetDate().Time,
 			})
 		}

@@ -2,11 +2,17 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
 	"sort"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/noelukwa/git-explorer/internal/events"
 	"github.com/noelukwa/git-explorer/internal/explorer/models"
 	"github.com/noelukwa/git-explorer/internal/explorer/repository"
+	"github.com/noelukwa/git-explorer/internal/pkg/messaging"
 )
 
 type RemoteRepoService interface {
@@ -17,7 +23,8 @@ type RemoteRepoService interface {
 }
 
 type remoteRepoService struct {
-	repo repository.RemoteRepository
+	repo     repository.RemoteRepository
+	consumer jetstream.Consumer
 }
 
 func (s *remoteRepoService) BatchSaveCommits(ctx context.Context, repoName string, commits []models.Commit) error {
@@ -111,8 +118,68 @@ func (s *remoteRepoService) GetCommits(ctx context.Context, repo string, startDa
 	}, nil
 }
 
-func NewRemoteRepoService(repo repository.RemoteRepository) RemoteRepoService {
+func NewRemoteRepoService(repo repository.RemoteRepository, cons jetstream.Consumer) RemoteRepoService {
 	return &remoteRepoService{
-		repo: repo,
+		repo:     repo,
+		consumer: cons,
 	}
+}
+
+func (s *remoteRepoService) Subcribe(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			msgs, err := s.consumer.Fetch(1, jetstream.FetchMaxWait(5*time.Second))
+			if err != nil {
+				continue
+			}
+
+			for msg := range msgs.Messages() {
+				log.Printf("received intent: %s", msg.Subject())
+				if err := s.handleNewIntent(ctx, msg.Data()); err != nil {
+					log.Printf("Error handling intent: %v", err)
+				}
+				msg.Ack()
+			}
+		}
+	}
+}
+
+func (s *remoteRepoService) handleNewIntent(ctx context.Context, payload []byte) error {
+	var msg messaging.Event
+
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		return fmt.Errorf("error unmarshalling payload: %w", err)
+	}
+
+	if msg.Subject == events.NEW_COMMITS_DATA {
+		var data events.NewCommitsDataEvent
+		if err := json.Unmarshal(msg.Data, &data); err != nil {
+			return fmt.Errorf("error unmarshalling payload: %w", err)
+		}
+
+		repo, err := s.repo.GetRepo(ctx, data.Repository)
+		if err != nil {
+			return err
+		}
+		err = s.repo.SaveManyCommit(ctx, repo.ID, data.Commits)
+		if err != nil {
+			return err
+		}
+
+	} else if msg.Subject == events.NEW_REPO_DATA {
+		var repo models.Repository
+		if err := json.Unmarshal(msg.Data, &repo); err != nil {
+			return fmt.Errorf("error unmarshalling payload: %w", err)
+		}
+
+		err := s.repo.SaveRepo(ctx, &repo)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -53,7 +53,6 @@ func (nc *NATSClient) Publish(ctx context.Context, event Event) error {
 }
 
 func (nc *NATSClient) NewConsumer(ctx context.Context, subs []string, name string) (jetstream.Consumer, error) {
-
 	consumer, err := nc.stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
 		Name:           name,
 		FilterSubjects: subs,

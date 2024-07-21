@@ -49,6 +49,11 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	consumer, err := nc.NewConsumer(ctx, []string{"intent.*"}, "xplorer")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	intentService := service.NewIntentService(
 		pgStore.IntentRepository(),
 		nc,
@@ -56,6 +61,7 @@ func main() {
 
 	repoService := service.NewRemoteRepoService(
 		pgStore.RemoteRepository(),
+		consumer,
 	)
 
 	router := api.SetupRoutes(intentService, repoService)
