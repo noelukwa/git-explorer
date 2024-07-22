@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"log"
 	"sort"
 	"time"
 
+	"github.com/noelukwa/git-explorer/internal/events"
 	"github.com/noelukwa/git-explorer/internal/explorer/models"
 	"github.com/noelukwa/git-explorer/internal/explorer/repository"
 )
@@ -15,6 +17,7 @@ type RemoteRepoService interface {
 	GetTopCommitters(ctx context.Context, repoName string, limit int) ([]models.AuthorStats, error)
 	GetCommits(ctx context.Context, repoName string, startDate, endDate time.Time, page, perPage int) (models.CommitPage, error)
 	Subcribe(ctx context.Context) error
+	Process(ctx context.Context, ek events.EventKind, b []byte)
 }
 
 type remoteRepoService struct {
@@ -138,6 +141,11 @@ func (s *remoteRepoService) Subcribe(ctx context.Context) error {
 			// }
 		}
 	}
+}
+
+func (s *remoteRepoService) Process(ctx context.Context, ek events.EventKind, b []byte) {
+	log.Printf("Received from gitexpress: EventKind=%s, Payload=%s", ek, string(b))
+	// Process the message here
 }
 
 // func (s *remoteRepoService) handleNewIntent(ctx context.Context, payload []byte) error {

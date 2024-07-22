@@ -22,7 +22,6 @@ import (
 )
 
 func main() {
-
 	var cfg config.ExplorerConfig
 
 	err := envconfig.Process("explorer", &cfg)
@@ -41,14 +40,18 @@ func main() {
 
 	err = mc.DeclareQueue("gitexpress")
 	if err != nil {
-		log.Fatalf("unable to connect to database: %v\n", err)
+		log.Fatalf("unable to declare gitexpress queue: %v\n", err)
+	}
+
+	err = mc.DeclareQueue("gitintents")
+	if err != nil {
+		log.Fatalf("unable to declare gitintents queue: %v\n", err)
 	}
 
 	conn, err := pgx.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("unable to connect to database: %v\n", err)
 	}
-
 	defer conn.Close(context.Background())
 
 	pgStore, err := postgres.NewStore(conn)
@@ -82,18 +85,35 @@ func main() {
 	}()
 
 	go func() {
-
-		if err := mc.Subscribe(ctx, "gitexpress", func(ctx context.Context, ek events.EventKind, b []byte) {
-			log.Printf("new event: %s --- payload: %s", ek, string(b))
-		}); err != nil {
+		if err := mc.Subscribe(ctx, "gitexpress", repoService.Process); err != nil {
 			serverErrors <- err
+		}
+	}()
+
+	// Producer: Publish to gitintents
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				message := fmt.Sprintf("Intent message at %s", time.Now().UTC())
+				err := mc.Publish(ctx, "gitintents", events.NEW_REPO_INTENT, []byte(message))
+				if err != nil {
+					log.Printf("Failed to publish to gitintents: %v", err)
+				} else {
+					log.Printf("Published to gitintents: %s", message)
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	select {
 	case sig := <-shutdownSignals:
 		log.Printf("received termination signal: %s", sig.String())
-
 	case err := <-serverErrors:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)

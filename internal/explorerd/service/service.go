@@ -19,7 +19,6 @@ type service struct {
 
 func NewService(interval time.Duration, gc *octo.Client) *service {
 	return &service{
-
 		interval: interval,
 		gc:       gc,
 	}
@@ -39,17 +38,6 @@ func NewService(interval time.Duration, gc *octo.Client) *service {
 // 		}
 // 	}
 
-// }
-
-// func (svc *service) Subcribe(ctx context.Context,  mc *messaging.Client) error {
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			return ctx.Err()
-// 		default:
-
-// 		}
-// 	}
 // }
 
 // func (svc *service) handleNewIntent(ctx context.Context, payload []byte) error {

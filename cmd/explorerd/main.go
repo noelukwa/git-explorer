@@ -26,7 +26,6 @@ type RepositoryIntent struct {
 }
 
 func main() {
-
 	var cfg config.ExplorerdConfig
 
 	err := envconfig.Process("explorerd", &cfg)
@@ -44,7 +43,12 @@ func main() {
 
 	err = mc.DeclareQueue("gitexpress")
 	if err != nil {
-		log.Fatalf("Failed to connect to messaging system: %v", err)
+		log.Fatalf("Failed to declare gitexpress queue: %v", err)
+	}
+
+	err = mc.DeclareQueue("gitintents")
+	if err != nil {
+		log.Fatalf("Failed to declare gitintents queue: %v", err)
 	}
 
 	gc := github.NewClient(cfg.GithubToken)
@@ -52,29 +56,38 @@ func main() {
 
 	errChan := make(chan error, 2)
 
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	id := 1
+	// Producer
 	go func() {
-		for range ticker.C {
-			message := "hello " + " " + time.Now().UTC().String() + " id " + strconv.Itoa(id)
-			err = mc.Publish(ctx, "gitexpress", events.NEW_REPO_INTENT, message)
-			if err != nil {
-				log.Printf("Failed to publish message: %s", err)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		id := 1
+		for {
+			select {
+			case <-ticker.C:
+				message := "hello " + " " + time.Now().UTC().String() + " id " + strconv.Itoa(id)
+				err = mc.Publish(ctx, "gitexpress", events.NEW_REPO_INTENT, message)
+				if err != nil {
+					log.Printf("Failed to publish message: %s", err)
+				}
+				log.Printf("Published message to gitexpress: %s", message)
+				id++
+			case <-ctx.Done():
+				return
 			}
-			log.Printf("Published message: %s", message)
-			id++
 		}
 	}()
 
-	// go func() {
-	// 	if err := mc.Subscribe(ctx, "gitexpress", func(ctx context.Context, ek events.EventKind, b []byte) {
-
-	// 	}); err != nil {
-	// 		errChan <- err
-	// 	}
-	// }()
+	// Consumer
+	go func() {
+		err := mc.Subscribe(ctx, "gitintents", func(ctx context.Context, ek events.EventKind, b []byte) {
+			log.Printf("Received message from gitintents: EventKind=%s, Body=%s", ek, string(b))
+			// Process the message here
+		})
+		if err != nil {
+			errChan <- err
+		}
+	}()
 
 	shutdownSignals := make(chan os.Signal, 1)
 	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
