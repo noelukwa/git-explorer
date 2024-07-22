@@ -18,16 +18,13 @@ const (
 type NewRepoIntentEvent struct {
 	Repository string    `json:"repository"`
 	Since      time.Time `json:"since"`
-	Kind       EventKind `json:"kind"`
 }
 
 type NewRepoDataEvent struct {
-	Kind EventKind          `json:"kind"`
 	Info *models.Repository `json:"info"`
 }
 
 type NewCommitsDataEvent struct {
-	Kind       EventKind       `json:"kind"`
 	Repository string          `json:"repository"`
 	Since      time.Time       `json:"since"`
 	Commits    []models.Commit `json:"commits"`

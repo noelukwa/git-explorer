@@ -12,7 +12,6 @@ type ExplorerConfig struct {
 
 type ExplorerdConfig struct {
 	GithubToken        string        `split_words:"true"`
-	MessagingProvider  string        `split_words:"true" default:"nats"`
 	MessagingURL       string        `split_words:"true" required:"true"`
 	BatchSize          int           `split_words:"true" default:"10"`
 	MaxRetries         int           `envconfig:"MAX_RETRIES" default:"3"`

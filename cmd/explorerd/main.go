@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/noelukwa/git-explorer/internal/events"
 	"github.com/noelukwa/git-explorer/internal/explorerd/service"
 	"github.com/noelukwa/git-explorer/internal/pkg/config"
 	"github.com/noelukwa/git-explorer/internal/pkg/github"
@@ -24,6 +26,7 @@ type RepositoryIntent struct {
 }
 
 func main() {
+
 	var cfg config.ExplorerdConfig
 
 	err := envconfig.Process("explorerd", &cfg)
@@ -33,38 +36,45 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	nc, err := messaging.NewNATSClient(ctx, cfg.MessagingURL)
+	mc, err := messaging.NewClient(cfg.MessagingURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to messaging system: %v", err)
 	}
-	defer nc.Close()
+	defer mc.Close()
 
-	kv, err := nc.NeKV(ctx, "intent_events")
+	err = mc.DeclareQueue("gitexpress")
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	consumer, err := nc.NewConsumer(ctx, []string{"intent.*"}, "explorerd")
-	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to connect to messaging system: %v", err)
 	}
 
 	gc := github.NewClient(cfg.GithubToken)
-	daemon := service.NewService(nc, cfg.MonitoringInterval, kv, gc)
+	_ = service.NewService(cfg.MonitoringInterval, gc)
 
 	errChan := make(chan error, 2)
 
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	id := 1
 	go func() {
-		if err := daemon.Start(ctx); err != nil {
-			errChan <- err
+		for range ticker.C {
+			message := "hello " + " " + time.Now().UTC().String() + " id " + strconv.Itoa(id)
+			err = mc.Publish(ctx, "gitexpress", events.NEW_REPO_INTENT, message)
+			if err != nil {
+				log.Printf("Failed to publish message: %s", err)
+			}
+			log.Printf("Published message: %s", message)
+			id++
 		}
 	}()
 
-	go func() {
-		if err := daemon.Subcribe(ctx, consumer, nc, kv); err != nil {
-			errChan <- err
-		}
-	}()
+	// go func() {
+	// 	if err := mc.Subscribe(ctx, "gitexpress", func(ctx context.Context, ek events.EventKind, b []byte) {
+
+	// 	}); err != nil {
+	// 		errChan <- err
+	// 	}
+	// }()
 
 	shutdownSignals := make(chan os.Signal, 1)
 	signal.Notify(shutdownSignals, syscall.SIGINT, syscall.SIGTERM)
@@ -80,7 +90,6 @@ func main() {
 		}
 	}()
 
-	// Wait for either an error or a shutdown signal
 	if err := <-errChan; err != nil && err != context.Canceled {
 		log.Fatalf("Error: %v", err)
 	} else {

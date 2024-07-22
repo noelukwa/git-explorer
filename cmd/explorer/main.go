@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/noelukwa/git-explorer/internal/events"
 	"github.com/noelukwa/git-explorer/internal/explorer/api"
 	"github.com/noelukwa/git-explorer/internal/explorer/repository/postgres"
 	"github.com/noelukwa/git-explorer/internal/explorer/service"
@@ -21,6 +22,7 @@ import (
 )
 
 func main() {
+
 	var cfg config.ExplorerConfig
 
 	err := envconfig.Process("explorer", &cfg)
@@ -31,11 +33,16 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	nc, err := messaging.NewNATSClient(ctx, cfg.MessagingURL)
+	mc, err := messaging.NewClient(cfg.MessagingURL)
 	if err != nil {
 		log.Fatalf("failed to connect to messaging system: %v", err)
 	}
-	defer nc.Close()
+	defer mc.Close()
+
+	err = mc.DeclareQueue("gitexpress")
+	if err != nil {
+		log.Fatalf("unable to connect to database: %v\n", err)
+	}
 
 	conn, err := pgx.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -49,19 +56,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	consumer, err := nc.NewConsumer(ctx, []string{"intent.*"}, "xplorer")
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	intentService := service.NewIntentService(
 		pgStore.IntentRepository(),
-		nc,
 	)
 
 	repoService := service.NewRemoteRepoService(
 		pgStore.RemoteRepository(),
-		consumer,
 	)
 
 	router := api.SetupRoutes(intentService, repoService)
@@ -79,6 +79,15 @@ func main() {
 	go func() {
 		log.Printf("starting HTTP server on %d", cfg.Port)
 		serverErrors <- httpServer.ListenAndServe()
+	}()
+
+	go func() {
+
+		if err := mc.Subscribe(ctx, "gitexpress", func(ctx context.Context, ek events.EventKind, b []byte) {
+			log.Printf("new event: %s --- payload: %s", ek, string(b))
+		}); err != nil {
+			serverErrors <- err
+		}
 	}()
 
 	select {
